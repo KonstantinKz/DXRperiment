@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# Visual Studio 2015/2017 cache/options directory
+.vs/
+
+# User-specific files
+*.user
+
+# Object/Bin folders
+/obj
+/bin
