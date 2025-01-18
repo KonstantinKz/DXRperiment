@@ -87,10 +87,12 @@ LRESULT CALLBACK Win32Application::WindowProc(HWND hWnd, UINT message, WPARAM wP
 	}
 	return 0;
 
-	/*case WM_KEYDOWN:
+	case WM_KEYDOWN:
 		if (pPipeline)
 		{
 			pPipeline->OnKeyDown(static_cast<UINT8>(wParam));
+			if (static_cast<UINT8>(wParam) == VK_ESCAPE)
+				PostQuitMessage;
 		}
 		return 0;
 
@@ -99,7 +101,7 @@ LRESULT CALLBACK Win32Application::WindowProc(HWND hWnd, UINT message, WPARAM wP
 		{
 			pPipeline->OnKeyUp(static_cast<UINT8>(wParam));
 		}
-		return 0;*/
+		return 0;
 
 	case WM_PAINT:
 		if (pPipeline)

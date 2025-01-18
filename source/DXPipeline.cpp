@@ -17,6 +17,14 @@ DXPipeline::DXPipeline(uint32_t viewportWidth, uint32_t viewportHeight, std::wst
 
 DXPipeline::~DXPipeline() {}
 
+void DXPipeline::OnKeyDown(uint8_t key)
+{
+}
+
+void DXPipeline::OnKeyUp(uint8_t key)
+{
+}
+
 // Helper fuction for resolving the full path of assets.
 std::wstring DXPipeline::GetAssetFullPath(LPCWSTR assetName)
 {

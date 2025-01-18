@@ -43,28 +43,31 @@ private:
 	CD3DX12_VIEWPORT m_viewport;
 	CD3DX12_RECT m_scissorRect;
 	ComPtr<IDXGISwapChain3> m_swapchain;
-	ComPtr<ID3D12Device> m_device;
+	ComPtr<ID3D12Device5> m_device;
 	ComPtr<ID3D12Resource> m_renderTargets[frameCount];
 	ComPtr<ID3D12CommandAllocator> m_commandAllocator;
 	ComPtr<ID3D12CommandQueue> m_commandQueue;
 	ComPtr<ID3D12RootSignature> m_rootSignature;
 	ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
 	ComPtr<ID3D12PipelineState> m_pipelineState;
-	ComPtr<ID3D12GraphicsCommandList> m_commandList;
-	UINT m_rtvDescriptorSize;
+	ComPtr<ID3D12GraphicsCommandList4> m_commandList;
+	uint32_t m_rtvDescriptorSize;
 
 	// App resources
 	ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 
 	// Synchronization objects
-	UINT m_frameIndex;
+	uint32_t m_frameIndex;
 	HANDLE m_fenceEvent;
 	ComPtr<ID3D12Fence> m_fence;
-	UINT64 m_fenceValue;
+	uint64_t m_fenceValue;
+	bool m_raster = true;
 
 	void InitPipelineObjects();
 	void LoadAssets();
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
+	void CheckRaytracingSupport();
+	virtual void OnKeyUp(uint8_t key);
 };

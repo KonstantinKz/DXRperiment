@@ -26,6 +26,8 @@ public:
 	virtual void OnUpdate() = 0;
 	virtual void OnRender() = 0;
 	virtual void OnDestroy() = 0;
+	virtual void OnKeyDown(uint8_t key);
+	virtual void OnKeyUp(uint8_t key);
 
 	uint32_t GetViewportWidth() const { return m_width; }
 	uint32_t GetViewportHeight() const { return m_height; }

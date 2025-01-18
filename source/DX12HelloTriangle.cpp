@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "DX12HelloTriangle.h"
 #include "DXPipelineHelper.h"
+#include <stdexcept>
 
 DX12HelloTriangle::DX12HelloTriangle(uint32_t viewportWidth, uint32_t viewportHeight, std::wstring name) :
 	DXPipeline(viewportWidth, viewportHeight, name),
@@ -14,6 +15,7 @@ void DX12HelloTriangle::OnInit()
 {
 	InitPipelineObjects();
 	LoadAssets();
+	CheckRaytracingSupport();
 }
 
 void DX12HelloTriangle::OnUpdate()
@@ -57,13 +59,13 @@ void DX12HelloTriangle::InitPipelineObjects()
 		ComPtr<IDXGIAdapter> warpAdapter;
 		ThrowIfFailed(factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)));
 
-		ThrowIfFailed(D3D12CreateDevice(warpAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device)));
+		ThrowIfFailed(D3D12CreateDevice(warpAdapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&m_device)));
 	}
 	else
 	{
 		ComPtr<IDXGIAdapter1> hardwareAdapter;
 		GetHardwareAdapter(factory.Get(), &hardwareAdapter);
-		ThrowIfFailed(D3D12CreateDevice(hardwareAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device)));
+		ThrowIfFailed(D3D12CreateDevice(hardwareAdapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&m_device)));
 	}
 
 	// Command queue
@@ -228,7 +230,7 @@ void DX12HelloTriangle::LoadAssets()
 
 void DX12HelloTriangle::PopulateCommandList()
 {
-	// Technically should here fences should be used 
+	// Technically fences should be used here 
 	// to determine GPU execution progress
 	ThrowIfFailed(m_commandAllocator->Reset());
 
@@ -260,11 +262,19 @@ void DX12HelloTriangle::PopulateCommandList()
 	m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
 	// Record commands
-	const float clearCoat[] = { 0.f, 0.2f, 0.4f, 1.0f };
-	m_commandList->ClearRenderTargetView(rtvHandle, clearCoat, 0, nullptr);
-	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	m_commandList->DrawInstanced(3, 1, 0, 0);
+	if (m_raster)
+	{
+		const float clearCoat[] = { 0.f, 0.2f, 0.4f, 1.0f };
+		m_commandList->ClearRenderTargetView(rtvHandle, clearCoat, 0, nullptr);
+		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+		m_commandList->DrawInstanced(3, 1, 0, 0);
+	}
+	else
+	{
+		const float clearCoat[] = { 0.1f, 0.8f, 0.4f, 1.0f };
+		m_commandList->ClearRenderTargetView(rtvHandle, clearCoat, 0, nullptr);
+	}
 
 	// Indicates that the back buffer will be used to present
 	barrier = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -298,4 +308,22 @@ void DX12HelloTriangle::WaitForPreviousFrame()
 	}
 
 	m_frameIndex = m_swapchain->GetCurrentBackBufferIndex();
+}
+
+void DX12HelloTriangle::CheckRaytracingSupport()
+{
+	D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
+	ThrowIfFailed(m_device->CheckFeatureSupport(
+		D3D12_FEATURE_D3D12_OPTIONS5,
+		&options5, sizeof(options5)
+	));
+
+	if (options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_0)
+		throw std::runtime_error("Raytracing is not supported on this device");
+}
+
+void DX12HelloTriangle::OnKeyUp(uint8_t key)
+{
+	if (key == VK_SPACE)
+		m_raster = !m_raster;
 }
