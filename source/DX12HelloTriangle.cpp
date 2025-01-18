@@ -1,7 +1,11 @@
+#include <vector>
+#include <stdexcept>
+#include <dxcapi.h>
+
 #include "stdafx.h"
 #include "DX12HelloTriangle.h"
-#include "DXPipelineHelper.h"
-#include <stdexcept>
+#include "DXRHelper.h"
+#include "BottomLevelASGenerator.h"
 
 DX12HelloTriangle::DX12HelloTriangle(uint32_t viewportWidth, uint32_t viewportHeight, std::wstring name) :
 	DXPipeline(viewportWidth, viewportHeight, name),
@@ -15,7 +19,11 @@ void DX12HelloTriangle::OnInit()
 {
 	InitPipelineObjects();
 	LoadAssets();
+
 	CheckRaytracingSupport();
+	CreateAccelerationStructures();
+
+	ThrowIfFailed(m_commandList->Close());
 }
 
 void DX12HelloTriangle::OnUpdate()
@@ -174,10 +182,6 @@ void DX12HelloTriangle::LoadAssets()
 		IID_PPV_ARGS(&m_commandList)
 	));
 
-	// Command lists are created in the recording state, but there is nothing
-	// to record yet. The main loop expects it to be closed, so close it now.
-	ThrowIfFailed(m_commandList->Close());
-
 	// Create vertex buffer
 	{
 		Vertex triangleVertices[] =
@@ -326,4 +330,113 @@ void DX12HelloTriangle::OnKeyUp(uint8_t key)
 {
 	if (key == VK_SPACE)
 		m_raster = !m_raster;
+}
+
+AccelerationStructureBuffers DX12HelloTriangle::CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers)
+{
+	nv_helpers_dx12::BottomLevelASGenerator bottomLevelAS;
+
+	for (const auto& buffer : vVertexBuffers) {
+		bottomLevelAS.AddVertexBuffer(
+			buffer.first.Get(), 0,
+			buffer.second,
+			sizeof(Vertex), 0, 0
+		);
+	}
+
+	uint64_t scratchSizeInBytes = 0;
+	uint64_t resultSizeInBytes = 0;
+
+	bottomLevelAS.ComputeASBufferSizes(m_device.Get(), false, &scratchSizeInBytes, &resultSizeInBytes);
+
+	AccelerationStructureBuffers buffers;
+	buffers.pScratch = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), scratchSizeInBytes,
+		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_COMMON,
+		nv_helpers_dx12::kDefaultHeapProps
+	);
+
+	buffers.pResult = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), resultSizeInBytes,
+		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+		nv_helpers_dx12::kDefaultHeapProps
+	);
+
+	bottomLevelAS.Generate(
+		m_commandList.Get(),
+		buffers.pScratch.Get(),
+		buffers.pResult.Get(),
+		false, nullptr);
+
+	return buffers;
+}
+
+void DX12HelloTriangle::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>>& instances)
+{
+	for (int i = 0; i < instances.size(); i++) {
+		m_topLevelASGenerator.AddInstance(
+			instances[i].first.Get(),
+			instances[i].second,
+			static_cast<uint32_t>(i),
+			static_cast<uint32_t>(0)
+		);
+	}
+
+	uint64_t scratchSize, resultSize, instanceDescsSize = { 0 };
+	
+	m_topLevelASGenerator.ComputeASBufferSizes(m_device.Get(), true, &scratchSize, &resultSize, &instanceDescsSize);
+
+	m_topLevelASBuffers.pScratch = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), scratchSize, 
+		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		nv_helpers_dx12::kDefaultHeapProps
+	);
+
+	m_topLevelASBuffers.pResult = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), resultSize,
+		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+		D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+		nv_helpers_dx12::kDefaultHeapProps
+	);
+
+	m_topLevelASBuffers.pInstanceDesc = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), instanceDescsSize, 
+		D3D12_RESOURCE_FLAG_NONE,
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nv_helpers_dx12::kUploadHeapProps
+	);
+
+	m_topLevelASGenerator.Generate(
+		m_commandList.Get(),
+		m_topLevelASBuffers.pScratch.Get(),
+		m_topLevelASBuffers.pResult.Get(),
+		m_topLevelASBuffers.pInstanceDesc.Get());
+}
+
+void DX12HelloTriangle::CreateAccelerationStructures()
+{
+	AccelerationStructureBuffers blasBuffers = CreateBottomLevelAS({ { m_vertexBuffer.Get(), 3 } });
+
+	m_instances = { { blasBuffers.pResult, XMMatrixIdentity() } };
+	CreateTopLevelAS(m_instances);
+
+	// Flush the command list and wait for it to finish
+	m_commandList->Close();
+	ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+	m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+	m_fenceValue++;
+	m_commandQueue->Signal(m_fence.Get(), m_fenceValue);
+
+	m_fence->SetEventOnCompletion(m_fenceValue, m_fenceEvent);
+	WaitForSingleObject(m_fenceEvent, INFINITE);
+
+	// Once the command list is finished executing, reset it to be reused for rendering
+	ThrowIfFailed(
+		m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get()));
+
+	// Store AS buffers
+	m_bottomLevelAS = blasBuffers.pResult;
 }

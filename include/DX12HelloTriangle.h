@@ -14,11 +14,23 @@
 
 #pragma once
 
+#include <vector>
+#include <dxcapi.h>
+
 #include "DXPipeline.h"
+#include "TopLevelASGenerator.h"
 
 using namespace DirectX;
 
 using Microsoft::WRL::ComPtr;
+
+// DXR
+struct AccelerationStructureBuffers
+{
+	ComPtr<ID3D12Resource> pScratch;      // Scratch memory for AS builder
+	ComPtr<ID3D12Resource> pResult;       // Where the AS is
+	ComPtr<ID3D12Resource> pInstanceDesc; // Hold the matrices of the instances
+};
 
 class DX12HelloTriangle : public DXPipeline
 {
@@ -64,10 +76,23 @@ private:
 	uint64_t m_fenceValue;
 	bool m_raster = true;
 
+
+	ComPtr<ID3D12Resource> m_bottomLevelAS;
+
+	nv_helpers_dx12::TopLevelASGenerator m_topLevelASGenerator;
+	AccelerationStructureBuffers m_topLevelASBuffers;
+	std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> m_instances;
+
+
 	void InitPipelineObjects();
 	void LoadAssets();
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 	void CheckRaytracingSupport();
 	virtual void OnKeyUp(uint8_t key);
+
+	// DXR
+	AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers);
+	void CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>>& instances);
+	void CreateAccelerationStructures();
 };
