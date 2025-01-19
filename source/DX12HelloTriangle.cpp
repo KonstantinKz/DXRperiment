@@ -300,8 +300,70 @@ void DX12HelloTriangle::PopulateCommandList()
 	}
 	else
 	{
-		const float clearCoat[] = { 0.1f, 0.8f, 0.4f, 1.0f };
-		m_commandList->ClearRenderTargetView(rtvHandle, clearCoat, 0, nullptr);
+		// Set desctiptor heaps
+		std::vector<ID3D12DescriptorHeap*> heaps = { m_srvUavHeap.Get() };
+		m_commandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+		CD3DX12_RESOURCE_BARRIER transition = CD3DX12_RESOURCE_BARRIER::Transition(
+			m_outputResource.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE,
+			D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		
+		m_commandList->ResourceBarrier(1, &transition);
+
+		D3D12_DISPATCH_RAYS_DESC desc = {};
+		uint32_t rayGenSectionSize = m_sbtHelper.GetRayGenSectionSize();
+		desc.RayGenerationShaderRecord.StartAddress = m_sbtStorage->GetGPUVirtualAddress();
+		desc.RayGenerationShaderRecord.SizeInBytes = rayGenSectionSize;
+
+		uint32_t missSectionSize = m_sbtHelper.GetMissSectionSize();
+		desc.MissShaderTable.StartAddress = m_sbtStorage->GetGPUVirtualAddress() + rayGenSectionSize;
+		desc.MissShaderTable.SizeInBytes = missSectionSize;
+		desc.MissShaderTable.StrideInBytes = m_sbtHelper.GetMissEntrySize();
+
+		uint32_t hitGroupSectionSize = m_sbtHelper.GetHitGroupSectionSize();
+		desc.HitGroupTable.StartAddress = m_sbtStorage->GetGPUVirtualAddress() + rayGenSectionSize + missSectionSize;
+		desc.HitGroupTable.SizeInBytes = hitGroupSectionSize;
+		desc.HitGroupTable.StrideInBytes = m_sbtHelper.GetHitGroupEntrySize();
+
+		desc.Width = m_viewport.Width;
+		desc.Height = m_viewport.Height;
+		desc.Depth = 1;
+
+		m_commandList->SetPipelineState1(m_rtStateObject.Get());
+		m_commandList->DispatchRays(&desc);
+
+		// Change RT output texture state to copy source
+		transition = CD3DX12_RESOURCE_BARRIER::Transition(
+			m_outputResource.Get(), 
+			D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+			D3D12_RESOURCE_STATE_COPY_SOURCE
+		);
+
+		m_commandList->ResourceBarrier(1, &transition);
+
+		// Change render target state to cody destination
+		transition = CD3DX12_RESOURCE_BARRIER::Transition(
+			m_renderTargets[m_frameIndex].Get(),
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			D3D12_RESOURCE_STATE_COPY_DEST
+		);
+
+		m_commandList->ResourceBarrier(1, &transition);
+
+
+		// Copy RT output to render target
+		m_commandList->CopyResource(
+			m_renderTargets[m_frameIndex].Get(),
+			m_outputResource.Get()
+		);
+
+		// Change render target state back
+		transition = CD3DX12_RESOURCE_BARRIER::Transition(
+			m_renderTargets[m_frameIndex].Get(), 
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			D3D12_RESOURCE_STATE_RENDER_TARGET
+		);
+
+		m_commandList->ResourceBarrier(1, &transition);
 	}
 
 	// Indicates that the back buffer will be used to present
@@ -577,7 +639,7 @@ void DX12HelloTriangle::CreateRaytracingOutputBuffer()
 	resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 
 	// For accuracy we should convert to sRGB in the shader
-	resDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	resDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	resDesc.Width = m_viewport.Width;
 	resDesc.Height = m_viewport.Height;
@@ -645,5 +707,3 @@ void DX12HelloTriangle::CreateShaderBindingTable()
 
 	m_sbtHelper.Generate(m_sbtStorage.Get(), m_rtStateObjectProps.Get());
 }
-
-
