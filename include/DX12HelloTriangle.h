@@ -19,6 +19,7 @@
 
 #include "DXPipeline.h"
 #include "TopLevelASGenerator.h"
+#include "ShaderBindingTableGenerator.h"
 
 using namespace DirectX;
 
@@ -95,6 +96,9 @@ private:
 	ComPtr<ID3D12Resource> m_outputResource;
 	ComPtr<ID3D12DescriptorHeap> m_srvUavHeap;
 
+	nv_helpers_dx12::ShaderBindingTableGenerator m_sbtHelper;
+	ComPtr<ID3D12Resource> m_sbtStorage;
+
 	// RT pipeline state
 	ComPtr<ID3D12StateObject> m_rtStateObject;
 	// Ray tracing pipeline state properties, retaining the shader identifiers
@@ -121,4 +125,5 @@ private:
 	void CreateRaytracingPipeline();
 	void CreateRaytracingOutputBuffer();
 	void CreateShaderResourceHeap();
+	void CreateShaderBindingTable();
 };

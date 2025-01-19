@@ -29,6 +29,7 @@ void DX12HelloTriangle::OnInit()
 	CreateRaytracingPipeline();
 	CreateRaytracingOutputBuffer();
 	CreateShaderResourceHeap();
+	CreateShaderBindingTable();
 }
 
 void DX12HelloTriangle::OnUpdate()
@@ -619,6 +620,30 @@ void DX12HelloTriangle::CreateShaderResourceHeap()
 	srvDesc.RaytracingAccelerationStructure.Location = m_topLevelASBuffers.pResult->GetGPUVirtualAddress();
 	
 	m_device->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
+}
+
+void DX12HelloTriangle::CreateShaderBindingTable()
+{
+	m_sbtHelper.Reset();
+
+	D3D12_GPU_DESCRIPTOR_HANDLE srvUavHeapHandle =
+		m_srvUavHeap->GetGPUDescriptorHandleForHeapStart();
+
+	auto heapPointer = reinterpret_cast<void*>(srvUavHeapHandle.ptr);
+
+	m_sbtHelper.AddRayGenerationProgram(L"RayGen", std::vector<void*>{ heapPointer });
+	m_sbtHelper.AddMissProgram(L"Miss", {});
+	m_sbtHelper.AddHitGroup(L"HitGroup", {});
+
+	uint32_t sbtSize = m_sbtHelper.ComputeSBTSize();
+
+	m_sbtStorage = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), sbtSize, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, nv_helpers_dx12::kUploadHeapProps);
+
+	if (!m_sbtStorage)
+		throw std::logic_error("Could not allocate shader binding table");
+
+	m_sbtHelper.Generate(m_sbtStorage.Get(), m_rtStateObjectProps.Get());
 }
 
 
