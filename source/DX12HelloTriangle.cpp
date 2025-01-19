@@ -6,6 +6,8 @@
 #include "DX12HelloTriangle.h"
 #include "DXRHelper.h"
 #include "BottomLevelASGenerator.h"
+#include "RaytracingPipelineGenerator.h"
+#include "RootSignatureGenerator.h"
 
 DX12HelloTriangle::DX12HelloTriangle(uint32_t viewportWidth, uint32_t viewportHeight, std::wstring name) :
 	DXPipeline(viewportWidth, viewportHeight, name),
@@ -24,6 +26,7 @@ void DX12HelloTriangle::OnInit()
 	CreateAccelerationStructures();
 
 	ThrowIfFailed(m_commandList->Close());
+	CreateRaytracingPipeline();
 }
 
 void DX12HelloTriangle::OnUpdate()
@@ -57,7 +60,21 @@ void DX12HelloTriangle::InitPipelineObjects()
 {
 	UINT dxgiFactoryFlags = 0;
 
-	// TODO: Enable debug layers
+#if defined(_DEBUG)
+	// Enable the debug layer (requires the Graphics Tools "optional feature").
+	// NOTE: Enabling the debug layer after device creation will invalidate the
+	// active device.
+	{
+		ComPtr<ID3D12Debug> debugController;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+		{
+			debugController->EnableDebugLayer();
+
+			// Enable additional debug layers.
+			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+		}
+	}
+#endif
 
 	ComPtr<IDXGIFactory4> factory;
 	ThrowIfFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
@@ -143,8 +160,12 @@ void DX12HelloTriangle::LoadAssets()
 	ComPtr<ID3DBlob> vertexShader;
 	ComPtr<ID3DBlob> pixelShader;
 
-	// TODO: Enable debug flags
-	uint32_t compileFlags = 0;
+#if defined(_DEBUG)
+	// Enable better shader debugging with the graphics debugging tools.
+	UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+	UINT compileFlags = 0;
+#endif
 
 	ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", 0, 0, &vertexShader, &error));
 	ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", 0, 0, &pixelShader, &error));
@@ -440,3 +461,110 @@ void DX12HelloTriangle::CreateAccelerationStructures()
 	// Store AS buffers
 	m_bottomLevelAS = blasBuffers.pResult;
 }
+
+ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateGenSignature()
+{
+	nv_helpers_dx12::RootSignatureGenerator rsc;
+	rsc.AddHeapRangesParameter({ 
+		{	
+			0, // u0
+			1, // 1 descriptor
+			0, // use implicit register space 0
+			D3D12_DESCRIPTOR_RANGE_TYPE_UAV, // UAV representing the output buffer
+			0 // heap slot where the UAV defined
+		}, 
+		{
+			0, // t0
+			1, // 1 descriptor
+			0, // use implicit register space 0
+			D3D12_DESCRIPTOR_RANGE_TYPE_SRV, // Top-level acceleration structure
+			1 // heap slot
+		} 
+	});
+
+
+	return rsc.Generate(m_device.Get(), true);
+}
+
+// -----------------------------------------------
+// Root signature of the miss shader is empty since 
+// this shader only communicates through the ray payload
+//
+ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateMissSignature()
+{
+	nv_helpers_dx12::RootSignatureGenerator rsc;
+	return rsc.Generate(m_device.Get(), true);
+}
+
+// -----------------------------------------------
+// Root signature of the hit shader is empty since 
+// this shader only communicates through the ray payload
+//
+ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateHitSignature()
+{
+	nv_helpers_dx12::RootSignatureGenerator rsc;
+	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV);
+	return rsc.Generate(m_device.Get(), true);
+}
+
+void DX12HelloTriangle::CreateRaytracingPipeline()
+{
+	nv_helpers_dx12::RayTracingPipelineGenerator pipeline(m_device.Get());
+
+	// Compile and add libraries
+	m_rayGenLibrary = nv_helpers_dx12::CompileShaderLibrary(L"assets/shaders/RayGen.hlsl");
+	m_missLibrary = nv_helpers_dx12::CompileShaderLibrary(L"assets/shaders/Miss.hlsl");
+	m_hitLibrary = nv_helpers_dx12::CompileShaderLibrary(L"assets/shaders/Hit.hlsl");
+	
+	// Semantic is given in HLSL
+	pipeline.AddLibrary(m_rayGenLibrary.Get(), {L"RayGen"});
+	pipeline.AddLibrary(m_missLibrary.Get(), {L"Miss"});
+	pipeline.AddLibrary(m_hitLibrary.Get(), {L"ClosestHit"});
+
+	// Create root signatures, to define shader external inputs
+	m_rayGenSignature = CreateGenSignature();
+	m_missSignature = CreateMissSignature();
+	m_hitSignature = CreateHitSignature();
+
+	// 3 different shaders can be invoked to obtain intersection:
+	// Intersection - called when hitting bb of non-triangylar geometry,
+	// Any-hit shader - called on potential intersections. This shader can, 
+	// for example, perform alpha-testing and discard some intersections. 
+	// Closest-hit shader - is invoked on the intersection point closest to 
+	// the ray origin. Those 3 shaders are bound together into a hit group.
+
+	// For triangular geometry the intersection shader is built-in. An
+	// empty any-hit shader is also defined by default, so for now 
+	// hit group contains only the closest hit shader. Shaders are 
+	// referred to by name.
+
+	// Hit group for the triangles, with a shader simply interpolating vertex
+	// colors
+	pipeline.AddHitGroup(L"HitGroup", L"ClosestHit");
+
+
+	// The following section associates the root signature to each shader. 
+	// Some shaders share the same root signature (eg. Miss and ShadowMiss). 
+	// The hit shaders are now only referred to as hit groups, meaning that 
+	// the underlying intersection, any-hit and closest-hit shaders share the 
+	// same root signature.
+	pipeline.AddRootSignatureAssociation(m_rayGenSignature.Get(), {L"RayGen"});
+	pipeline.AddRootSignatureAssociation(m_missSignature.Get(), {L"Miss"});
+	pipeline.AddRootSignatureAssociation(m_hitSignature.Get(), {L"HitGroup"});
+
+	// The payload size defines the maximum size of the data carried by the rays,
+	// e.g. the data exchanged between the shaders (HitInfo).
+	pipeline.SetMaxPayloadSize(4 * sizeof(float)); // RGB + distance
+
+	// The attribute size defines the max size of the hit shader attributes
+	pipeline.SetMaxAttributeSize(2 * sizeof(float)); // barycentric coords 
+
+	// Set requcursion depth - for now only trace primary rays
+	pipeline.SetMaxRecursionDepth(1);
+
+	m_rtStateObject = pipeline.Generate();
+
+	ThrowIfFailed(m_rtStateObject->QueryInterface(IID_PPV_ARGS(&m_rtStateObjectProps)));
+}
+
+

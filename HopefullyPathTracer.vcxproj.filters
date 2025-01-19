@@ -87,4 +87,10 @@
   <ItemGroup>
     <CustomBuild Include="assets\shaders\shaders.hlsl" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\shaders\Common.hlsl" />
+    <None Include="assets\shaders\Hit.hlsl" />
+    <None Include="assets\shaders\Miss.hlsl" />
+    <None Include="assets\shaders\RayGen.hlsl" />
+  </ItemGroup>
 </Project>

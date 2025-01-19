@@ -77,11 +77,26 @@ private:
 	bool m_raster = true;
 
 
+	// DXR AS
 	ComPtr<ID3D12Resource> m_bottomLevelAS;
-
 	nv_helpers_dx12::TopLevelASGenerator m_topLevelASGenerator;
 	AccelerationStructureBuffers m_topLevelASBuffers;
 	std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> m_instances;
+
+	// DXR 
+	ComPtr<IDxcBlob> m_rayGenLibrary;
+	ComPtr<IDxcBlob> m_missLibrary;
+	ComPtr<IDxcBlob> m_hitLibrary;
+
+	ComPtr<ID3D12RootSignature> m_rayGenSignature;
+	ComPtr<ID3D12RootSignature> m_missSignature;
+	ComPtr<ID3D12RootSignature> m_hitSignature;
+
+	// RT pipeline state
+	ComPtr<ID3D12StateObject> m_rtStateObject;
+	// Ray tracing pipeline state properties, retaining the shader identifiers
+	// to use in the Shader Binding Table
+	ComPtr<ID3D12StateObjectProperties> m_rtStateObjectProps;
 
 
 	void InitPipelineObjects();
@@ -91,8 +106,14 @@ private:
 	void CheckRaytracingSupport();
 	virtual void OnKeyUp(uint8_t key);
 
-	// DXR
+	// DXR AS
 	AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers);
 	void CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>>& instances);
 	void CreateAccelerationStructures();
+
+	// DXR
+	ComPtr<ID3D12RootSignature> CreateGenSignature();
+	ComPtr<ID3D12RootSignature> CreateMissSignature();
+	ComPtr<ID3D12RootSignature> CreateHitSignature();
+	void CreateRaytracingPipeline();
 };
