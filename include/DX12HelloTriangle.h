@@ -91,6 +91,9 @@ private:
 	ComPtr<ID3D12RootSignature> m_rayGenSignature;
 	ComPtr<ID3D12RootSignature> m_missSignature;
 	ComPtr<ID3D12RootSignature> m_hitSignature;
+	
+	ComPtr<ID3D12Resource> m_outputResource;
+	ComPtr<ID3D12DescriptorHeap> m_srvUavHeap;
 
 	// RT pipeline state
 	ComPtr<ID3D12StateObject> m_rtStateObject;
@@ -116,4 +119,6 @@ private:
 	ComPtr<ID3D12RootSignature> CreateMissSignature();
 	ComPtr<ID3D12RootSignature> CreateHitSignature();
 	void CreateRaytracingPipeline();
+	void CreateRaytracingOutputBuffer();
+	void CreateShaderResourceHeap();
 };

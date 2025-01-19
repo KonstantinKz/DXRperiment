@@ -24,9 +24,11 @@ void DX12HelloTriangle::OnInit()
 
 	CheckRaytracingSupport();
 	CreateAccelerationStructures();
-
 	ThrowIfFailed(m_commandList->Close());
+	
 	CreateRaytracingPipeline();
+	CreateRaytracingOutputBuffer();
+	CreateShaderResourceHeap();
 }
 
 void DX12HelloTriangle::OnUpdate()
@@ -565,6 +567,58 @@ void DX12HelloTriangle::CreateRaytracingPipeline()
 	m_rtStateObject = pipeline.Generate();
 
 	ThrowIfFailed(m_rtStateObject->QueryInterface(IID_PPV_ARGS(&m_rtStateObjectProps)));
+}
+
+void DX12HelloTriangle::CreateRaytracingOutputBuffer()
+{
+	D3D12_RESOURCE_DESC resDesc = {};
+	resDesc.DepthOrArraySize = 1;
+	resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+	// For accuracy we should convert to sRGB in the shader
+	resDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	resDesc.Width = m_viewport.Width;
+	resDesc.Height = m_viewport.Height;
+	resDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	resDesc.MipLevels = 1;
+	resDesc.SampleDesc.Count = 1;
+
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&nv_helpers_dx12::kDefaultHeapProps, 
+		D3D12_HEAP_FLAG_NONE, 
+		&resDesc,
+		D3D12_RESOURCE_STATE_COPY_SOURCE, 
+		nullptr,
+		IID_PPV_ARGS(&m_outputResource)
+	));
+}
+
+void DX12HelloTriangle::CreateShaderResourceHeap()
+{
+	// Create a SRV/UAV/CBV descriptor heap. We need 2 entries - 1 UAV for the
+	// raytracing output and 1 SRV for the TLAS
+	m_srvUavHeap = nv_helpers_dx12::CreateDescriptorHeap(
+		m_device.Get(), 2, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle =
+		m_srvUavHeap->GetCPUDescriptorHandleForHeapStart();
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+	m_device->CreateUnorderedAccessView(m_outputResource.Get(), nullptr, &uavDesc,
+		srvHandle);
+
+	srvHandle.ptr += m_device->GetDescriptorHandleIncrementSize(
+		D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.RaytracingAccelerationStructure.Location = m_topLevelASBuffers.pResult->GetGPUVirtualAddress();
+	
+	m_device->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
 }
 
 
