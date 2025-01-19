@@ -695,7 +695,10 @@ void DX12HelloTriangle::CreateShaderBindingTable()
 
 	m_sbtHelper.AddRayGenerationProgram(L"RayGen", std::vector<void*>{ heapPointer });
 	m_sbtHelper.AddMissProgram(L"Miss", {});
-	m_sbtHelper.AddHitGroup(L"HitGroup", {});
+
+	auto vertexBufferPointer = reinterpret_cast<void*>(m_vertexBuffer->GetGPUVirtualAddress());
+
+	m_sbtHelper.AddHitGroup(L"HitGroup", std::vector<void*>{vertexBufferPointer});
 
 	uint32_t sbtSize = m_sbtHelper.ComputeSBTSize();
 
