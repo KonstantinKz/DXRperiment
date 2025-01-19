@@ -6,6 +6,14 @@ RWTexture2D<float4> gOutput : register(u0);
 // Raytracing acceleration structure, accessed as a SRV
 RaytracingAccelerationStructure SceneBVH : register(t0);
 
+cbuffer CameraParams : register(b0)
+{
+    float4x4 view;
+    float4x4 projection;
+    float4x4 viewInv;
+    float4x4 projectionInv;
+}
+
 [shader("raygeneration")]
 void RayGen()
 {
@@ -20,8 +28,9 @@ void RayGen()
     float2 d = (((launchIndex + 0.5f) / dims) * 2.f - 1.f);
     
     RayDesc ray;
-    ray.Origin = float3(d.x, -d.y, 1);
-    ray.Direction = float3(0, 0, -1);
+    ray.Origin = mul(viewInv, float4(0, 0, 0, 1));
+    float4 rayTarget = mul(projectionInv, float4(d.x, -d.y, 1, 1));
+    ray.Direction = mul(viewInv, float4(rayTarget.xyz, 0));
     ray.TMin = 0;
     ray.TMax = 1e9;
     

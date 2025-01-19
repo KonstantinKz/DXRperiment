@@ -77,6 +77,9 @@ private:
 	uint64_t m_fenceValue;
 	bool m_raster = true;
 
+	ComPtr<ID3D12Resource> m_cameraBuffer;
+	ComPtr<ID3D12DescriptorHeap> m_constHeap;
+	uint32_t m_cameraBufferSize = 0;
 
 	// DXR AS
 	ComPtr<ID3D12Resource> m_bottomLevelAS;
@@ -111,6 +114,8 @@ private:
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 	void CheckRaytracingSupport();
+	void CreateCameraBuffer();
+	void UpdateCameraBuffer();
 	virtual void OnKeyUp(uint8_t key);
 
 	// DXR AS
