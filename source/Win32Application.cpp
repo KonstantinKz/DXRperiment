@@ -14,16 +14,16 @@
 
 HWND Win32Application::m_hwnd = nullptr;
 
-int Win32Application::Run(DXPipeline* pPipeline, HINSTANCE hInstance, int nCmdShow)
+int Win32Application::Run(DXPipeline *pPipeline, HINSTANCE hInstance, int nCmdShow)
 {
 	// Parse the command line parameters
 	int argc;
-	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 	pPipeline->ParseCommandLineArgs(argv, argc);
 	LocalFree(argv);
 
 	// Initialize the window class.
-	WNDCLASSEX windowClass = { 0 };
+	WNDCLASSEX windowClass = {0};
 	windowClass.cbSize = sizeof(WNDCLASSEX);
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = WindowProc;
@@ -32,7 +32,7 @@ int Win32Application::Run(DXPipeline* pPipeline, HINSTANCE hInstance, int nCmdSh
 	windowClass.lpszClassName = L"DXPipelineClass";
 	RegisterClassEx(&windowClass);
 
-	RECT windowRect = { 0, 0, static_cast<LONG>(pPipeline->GetViewportWidth()), static_cast<LONG>(pPipeline->GetViewportHeight()) };
+	RECT windowRect = {0, 0, static_cast<LONG>(pPipeline->GetViewportWidth()), static_cast<LONG>(pPipeline->GetViewportHeight())};
 	AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
 	// Create the window and store a handle to it.
@@ -44,8 +44,8 @@ int Win32Application::Run(DXPipeline* pPipeline, HINSTANCE hInstance, int nCmdSh
 		CW_USEDEFAULT,
 		windowRect.right - windowRect.left,
 		windowRect.bottom - windowRect.top,
-		nullptr,		// We have no parent window.
-		nullptr,		// We aren't using menus.
+		nullptr, // We have no parent window.
+		nullptr, // We aren't using menus.
 		hInstance,
 		pPipeline);
 
@@ -75,7 +75,7 @@ int Win32Application::Run(DXPipeline* pPipeline, HINSTANCE hInstance, int nCmdSh
 // Main message handler for the sample.
 LRESULT CALLBACK Win32Application::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	DXPipeline* pPipeline = reinterpret_cast<DXPipeline*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+	DXPipeline *pPipeline = reinterpret_cast<DXPipeline *>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 
 	switch (message)
 	{
@@ -85,13 +85,20 @@ LRESULT CALLBACK Win32Application::WindowProc(HWND hWnd, UINT message, WPARAM wP
 		LPCREATESTRUCT pCreateStruct = reinterpret_cast<LPCREATESTRUCT>(lParam);
 		SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pCreateStruct->lpCreateParams));
 	}
-	return 0;
+		return 0;
+
+	case WM_MOUSEMOVE:
+		if (pPipeline)
+		{
+			pPipeline->OnMouseMove(static_cast<uint8_t>(wParam), static_cast<uint32_t>(lParam));
+		}
+		return 0;
 
 	case WM_KEYDOWN:
 		if (pPipeline)
 		{
-			pPipeline->OnKeyDown(static_cast<UINT8>(wParam));
-			if (static_cast<UINT8>(wParam) == VK_ESCAPE)
+			pPipeline->OnKeyDown(static_cast<uint8_t>(wParam));
+			if (static_cast<uint8_t>(wParam) == VK_ESCAPE)
 				PostQuitMessage;
 		}
 		return 0;
@@ -99,7 +106,7 @@ LRESULT CALLBACK Win32Application::WindowProc(HWND hWnd, UINT message, WPARAM wP
 	case WM_KEYUP:
 		if (pPipeline)
 		{
-			pPipeline->OnKeyUp(static_cast<UINT8>(wParam));
+			pPipeline->OnKeyUp(static_cast<uint8_t>(wParam));
 		}
 		return 0;
 

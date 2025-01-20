@@ -1,4 +1,4 @@
-// This code is based on the code provided 
+// This code is based on the code provided
 // by Microsoft in DX12 sample projects
 
 //*********************************************************
@@ -28,20 +28,21 @@ public:
 	virtual void OnDestroy() = 0;
 	virtual void OnKeyDown(uint8_t key);
 	virtual void OnKeyUp(uint8_t key);
+	virtual void OnMouseMove(uint8_t wParam, uint32_t lParam);
 
 	uint32_t GetViewportWidth() const { return m_width; }
 	uint32_t GetViewportHeight() const { return m_height; }
-	const WCHAR* GetTitle() const { return m_title.c_str(); }
+	const WCHAR *GetTitle() const { return m_title.c_str(); }
 
-	void ParseCommandLineArgs(_In_reads_(argc) WCHAR* argv[], int argc);
+	void ParseCommandLineArgs(_In_reads_(argc) WCHAR *argv[], int argc);
 
 protected:
 	std::wstring GetAssetFullPath(LPCWSTR assetName);
-	void GetHardwareAdapter(_In_ IDXGIFactory2* pFactory, _Outptr_result_maybenull_ IDXGIAdapter1** ppAdapter);
+	void GetHardwareAdapter(_In_ IDXGIFactory2 *pFactory, _Outptr_result_maybenull_ IDXGIAdapter1 **ppAdapter);
 	void SetCustomWindowText(LPCWSTR text);
 
 	float m_aspectRatio;
-	
+
 	// Adapter info
 	bool m_useWarpDevice;
 

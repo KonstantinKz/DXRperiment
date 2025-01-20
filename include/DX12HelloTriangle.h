@@ -1,5 +1,5 @@
-// This code is based on the code provided 
-// by Microsoft in DX12 sample projects 
+// This code is based on the code provided
+// by Microsoft in DX12 sample projects
 
 //*********************************************************
 //
@@ -20,6 +20,7 @@
 #include "DXPipeline.h"
 #include "TopLevelASGenerator.h"
 #include "ShaderBindingTableGenerator.h"
+#include "glm.hpp"
 
 using namespace DirectX;
 
@@ -28,8 +29,8 @@ using Microsoft::WRL::ComPtr;
 // DXR
 struct AccelerationStructureBuffers
 {
-	ComPtr<ID3D12Resource> pScratch;      // Scratch memory for AS builder
-	ComPtr<ID3D12Resource> pResult;       // Where the AS is
+	ComPtr<ID3D12Resource> pScratch;	  // Scratch memory for AS builder
+	ComPtr<ID3D12Resource> pResult;		  // Where the AS is
 	ComPtr<ID3D12Resource> pInstanceDesc; // Hold the matrices of the instances
 };
 
@@ -77,6 +78,13 @@ private:
 	uint64_t m_fenceValue;
 	bool m_raster = true;
 
+	// Input
+	float m_mousePosX, m_mousePosY;
+
+	// Camera
+	float m_cameraYaw, m_cameraPitch;
+	glm::vec3 m_cameraEye;
+	glm::vec3 m_cameraDir;
 	ComPtr<ID3D12Resource> m_cameraBuffer;
 	ComPtr<ID3D12DescriptorHeap> m_constHeap;
 	uint32_t m_cameraBufferSize = 0;
@@ -87,7 +95,7 @@ private:
 	AccelerationStructureBuffers m_topLevelASBuffers;
 	std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> m_instances;
 
-	// DXR 
+	// DXR
 	ComPtr<IDxcBlob> m_rayGenLibrary;
 	ComPtr<IDxcBlob> m_missLibrary;
 	ComPtr<IDxcBlob> m_hitLibrary;
@@ -95,7 +103,7 @@ private:
 	ComPtr<ID3D12RootSignature> m_rayGenSignature;
 	ComPtr<ID3D12RootSignature> m_missSignature;
 	ComPtr<ID3D12RootSignature> m_hitSignature;
-	
+
 	ComPtr<ID3D12Resource> m_outputResource;
 	ComPtr<ID3D12DescriptorHeap> m_srvUavHeap;
 
@@ -108,7 +116,6 @@ private:
 	// to use in the Shader Binding Table
 	ComPtr<ID3D12StateObjectProperties> m_rtStateObjectProps;
 
-
 	void InitPipelineObjects();
 	void LoadAssets();
 	void PopulateCommandList();
@@ -117,10 +124,12 @@ private:
 	void CreateCameraBuffer();
 	void UpdateCameraBuffer();
 	virtual void OnKeyUp(uint8_t key);
+	virtual void OnKeyDown(uint8_t key);
+	virtual void OnMouseMove(uint8_t wParam, uint32_t lParam);
 
 	// DXR AS
 	AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers);
-	void CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>>& instances);
+	void CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances);
 	void CreateAccelerationStructures();
 
 	// DXR
