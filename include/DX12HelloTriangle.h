@@ -70,6 +70,9 @@ private:
 	// App resources
 	ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	ComPtr<ID3D12Resource> m_planeBuffer;
+	D3D12_VERTEX_BUFFER_VIEW m_planeBufferView;
+	ComPtr<ID3D12Resource> m_globalConstBuffer;
 
 	// Synchronization objects
 	uint32_t m_frameIndex;
@@ -123,6 +126,9 @@ private:
 	void CheckRaytracingSupport();
 	void CreateCameraBuffer();
 	void UpdateCameraBuffer();
+	void CreatePlaneBV();
+	void CreateGlobalConstantBuffer();
+	void InitCamera();
 	virtual void OnKeyUp(uint8_t key);
 	virtual void OnKeyDown(uint8_t key);
 	virtual void OnMouseMove(uint8_t wParam, uint32_t lParam);

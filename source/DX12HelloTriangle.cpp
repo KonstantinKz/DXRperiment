@@ -28,14 +28,11 @@ void DX12HelloTriangle::OnInit()
 	ThrowIfFailed(m_commandList->Close());
 
 	CreateRaytracingPipeline();
+	CreateGlobalConstantBuffer();
 	CreateRaytracingOutputBuffer();
 	CreateCameraBuffer();
-	m_cameraEye = {0.f, 0.f, 3.f};
-	m_cameraDir = {0.f, 0.f, -3.f};
-	m_cameraYaw = -90.0f;
-	m_cameraPitch = 0;
-	m_mousePosX = m_viewport.Width / 2;
-	m_mousePosY = m_viewport.Height / 2;
+	InitCamera();
+
 
 	CreateShaderResourceHeap();
 	CreateShaderBindingTable();
@@ -254,6 +251,8 @@ void DX12HelloTriangle::LoadAssets()
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
 	}
 
+	CreatePlaneBV();
+
 	// Create synchronization objects and wait until assets have been uploaded to the GPU.
 	ThrowIfFailed(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
 	m_fenceValue = 1;
@@ -312,7 +311,10 @@ void DX12HelloTriangle::PopulateCommandList()
 		m_commandList->ClearRenderTargetView(rtvHandle, clearCoat, 0, nullptr);
 		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-		m_commandList->DrawInstanced(3, 1, 0, 0);
+		m_commandList->DrawInstanced(3, 3, 0, 0);
+
+		m_commandList->IASetVertexBuffers(0, 1, &m_planeBufferView);
+		m_commandList->DrawInstanced(6, 1, 0, 0);
 	}
 	else
 	{
@@ -469,6 +471,84 @@ void DX12HelloTriangle::UpdateCameraBuffer()
 	m_cameraBuffer->Unmap(0, nullptr);
 }
 
+void DX12HelloTriangle::CreatePlaneBV()
+{
+	Vertex planeVertices[] = {
+		{{-1.5f, -.8f,  1.5f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // 0
+		{{-1.5f, -.8f, -1.5f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // 1
+		{{ 1.5f, -.8f,  1.5f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // 2
+		{{ 1.5f, -.8f,  1.5f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // 2
+		{{-1.5f, -.8f, -1.5f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // 1
+		{{ 1.5f, -.8f, -1.5f}, {1.0f, 1.0f, 1.0f, 1.0f}}  // 4
+	};
+
+	const uint32_t planeBufferSize = sizeof(planeVertices);
+
+	CD3DX12_HEAP_PROPERTIES heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	CD3DX12_RESOURCE_DESC bufferResource = CD3DX12_RESOURCE_DESC::Buffer(planeBufferSize);
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&heapProperties, 
+		D3D12_HEAP_FLAG_NONE, 
+		&bufferResource, 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&m_planeBuffer)
+	));
+
+	// Copy triangle data to the vertex buffer
+	UINT8* pVertexDataBegin;
+	CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU.
+	ThrowIfFailed(m_planeBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
+	memcpy(pVertexDataBegin, planeVertices, sizeof(planeVertices));
+	m_planeBuffer->Unmap(0, nullptr);
+
+	// Initialize the vertex buffer view.
+	m_planeBufferView.BufferLocation = m_planeBuffer->GetGPUVirtualAddress();
+	m_planeBufferView.StrideInBytes = sizeof(Vertex);
+	m_planeBufferView.SizeInBytes = planeBufferSize;
+}
+
+void DX12HelloTriangle::CreateGlobalConstantBuffer()
+{
+	XMVECTOR bufferData[] = {
+		// A
+		XMVECTOR{1.0f, 0.0f, 0.0f, 1.0f},
+		XMVECTOR{0.7f, 0.4f, 0.0f, 1.0f},
+		XMVECTOR{0.4f, 0.7f, 0.0f, 1.0f},
+
+		// B
+		XMVECTOR{0.0f, 1.0f, 0.0f, 1.0f},
+		XMVECTOR{0.0f, 0.7f, 0.4f, 1.0f},
+		XMVECTOR{0.0f, 0.4f, 0.7f, 1.0f},
+
+		// C
+		XMVECTOR{0.0f, 0.0f, 1.0f, 1.0f},
+		XMVECTOR{0.4f, 0.0f, 0.7f, 1.0f},
+		XMVECTOR{0.7f, 0.0f, 0.4f, 1.0f},
+	};
+
+	m_globalConstBuffer = nv_helpers_dx12::CreateBuffer(
+		m_device.Get(), sizeof(bufferData), D3D12_RESOURCE_FLAG_NONE,
+		D3D12_RESOURCE_STATE_GENERIC_READ, nv_helpers_dx12::kUploadHeapProps
+	);
+
+	UINT8* pData;
+	CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU.
+	ThrowIfFailed(m_globalConstBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
+	memcpy(pData, bufferData, sizeof(bufferData));
+	m_globalConstBuffer->Unmap(0, nullptr);
+}
+
+void DX12HelloTriangle::InitCamera()
+{
+	m_cameraEye = { 0.f, 0.f, 3.f };
+	m_cameraDir = { 0.f, 0.f, -3.f };
+	m_cameraYaw = -90.0f;
+	m_cameraPitch = 0;
+	m_mousePosX = m_viewport.Width / 2;
+	m_mousePosY = m_viewport.Height / 2;
+}
+
 void DX12HelloTriangle::OnKeyUp(uint8_t key)
 {
 	if (key == VK_SPACE)
@@ -594,9 +674,17 @@ void DX12HelloTriangle::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D
 
 void DX12HelloTriangle::CreateAccelerationStructures()
 {
-	AccelerationStructureBuffers blasBuffers = CreateBottomLevelAS({{m_vertexBuffer.Get(), 3}});
+	AccelerationStructureBuffers blasTriangle = CreateBottomLevelAS({{m_vertexBuffer.Get(), 3}});
+	AccelerationStructureBuffers blasPlane = CreateBottomLevelAS({{m_planeBuffer.Get(), 6}});
 
-	m_instances = {{blasBuffers.pResult, XMMatrixIdentity()}};
+
+	m_instances = {
+		{blasTriangle.pResult, XMMatrixIdentity()},
+		{blasTriangle.pResult, XMMatrixTranslation(-1.f, 0.f, 0.f)},
+		{blasTriangle.pResult, XMMatrixTranslation(1.f, 0.f, 0.f)},
+		{blasPlane.pResult, XMMatrixTranslation(0.f, 0.f, 0.f)},
+	};
+
 	CreateTopLevelAS(m_instances);
 
 	// Flush the command list and wait for it to finish
@@ -614,7 +702,7 @@ void DX12HelloTriangle::CreateAccelerationStructures()
 		m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get()));
 
 	// Store AS buffers
-	m_bottomLevelAS = blasBuffers.pResult;
+	m_bottomLevelAS = blasTriangle.pResult;
 }
 
 ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateGenSignature()
@@ -659,6 +747,7 @@ ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateHitSignature()
 {
 	nv_helpers_dx12::RootSignatureGenerator rsc;
 	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV);
+	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_CBV, 0);
 	return rsc.Generate(m_device.Get(), true);
 }
 
@@ -793,8 +882,9 @@ void DX12HelloTriangle::CreateShaderBindingTable()
 	m_sbtHelper.AddMissProgram(L"Miss", {});
 
 	auto vertexBufferPointer = reinterpret_cast<void *>(m_vertexBuffer->GetGPUVirtualAddress());
+	auto globalConstBufferPointer = reinterpret_cast<void*>(m_globalConstBuffer->GetGPUVirtualAddress());
 
-	m_sbtHelper.AddHitGroup(L"HitGroup", std::vector<void *>{vertexBufferPointer});
+	m_sbtHelper.AddHitGroup(L"HitGroup", std::vector<void *>{vertexBufferPointer, globalConstBufferPointer});
 
 	uint32_t sbtSize = m_sbtHelper.ComputeSBTSize();
 
