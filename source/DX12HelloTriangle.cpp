@@ -28,6 +28,7 @@ void DX12HelloTriangle::OnInit()
 	ThrowIfFailed(m_commandList->Close());
 
 	CreateRaytracingPipeline();
+	CreatePerInstanceConstantBuffers();
 	CreateGlobalConstantBuffer();
 	CreateRaytracingOutputBuffer();
 	CreateCameraBuffer();
@@ -539,6 +540,51 @@ void DX12HelloTriangle::CreateGlobalConstantBuffer()
 	m_globalConstBuffer->Unmap(0, nullptr);
 }
 
+void DX12HelloTriangle::CreatePerInstanceConstantBuffers()
+{
+	XMVECTOR bufferData[] = {
+		// A
+		XMVECTOR{1.0f, 0.0f, 0.0f, 1.0f},
+		XMVECTOR{0.7f, 0.4f, 0.0f, 1.0f},
+		XMVECTOR{0.4f, 0.7f, 0.0f, 1.0f},
+		XMVECTOR{0.0f, 0.0f, 0.0f, 1.0f},
+
+		// B
+		XMVECTOR{0.0f, 1.0f, 0.0f, 1.0f},
+		XMVECTOR{0.0f, 0.7f, 0.4f, 1.0f},
+		XMVECTOR{0.0f, 0.4f, 0.7f, 1.0f},
+		XMVECTOR{0.0f, 0.0f, 0.0f, 1.0f},
+
+		// C
+		XMVECTOR{0.0f, 0.0f, 1.0f, 1.0f},
+		XMVECTOR{0.4f, 0.0f, 0.7f, 1.0f},
+		XMVECTOR{0.7f, 0.0f, 0.4f, 1.0f},
+		XMVECTOR{0.0f, 0.0f, 0.0f, 1.0f},
+	};
+
+	m_perInstanceConstBuffers.resize(3);
+	uint32_t i = 0;
+	for (auto& cb : m_perInstanceConstBuffers)
+	{
+		const uint32_t bufferSize = sizeof(XMVECTOR) * 4;
+		cb = nv_helpers_dx12::CreateBuffer(
+			m_device.Get(),
+			bufferSize,
+			D3D12_RESOURCE_FLAG_NONE,
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nv_helpers_dx12::kUploadHeapProps
+		);
+
+		UINT8* pData;
+		CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU.
+		ThrowIfFailed(
+			cb->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
+		memcpy(pData, &bufferData[i * 4], sizeof(bufferData));
+		cb->Unmap(0, nullptr);
+		++i;
+	}
+}
+
 void DX12HelloTriangle::InitCamera()
 {
 	m_cameraEye = { 0.f, 0.f, 3.f };
@@ -640,7 +686,7 @@ void DX12HelloTriangle::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D
 			instances[i].first.Get(),
 			instances[i].second,
 			static_cast<uint32_t>(i),
-			static_cast<uint32_t>(0));
+			static_cast<uint32_t>(i));
 	}
 
 	uint64_t scratchSize, resultSize, instanceDescsSize = {0};
@@ -746,7 +792,7 @@ ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateMissSignature()
 ComPtr<ID3D12RootSignature> DX12HelloTriangle::CreateHitSignature()
 {
 	nv_helpers_dx12::RootSignatureGenerator rsc;
-	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV);
+	//rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV);
 	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_CBV, 0);
 	return rsc.Generate(m_device.Get(), true);
 }
@@ -763,7 +809,7 @@ void DX12HelloTriangle::CreateRaytracingPipeline()
 	// Semantic is given in HLSL
 	pipeline.AddLibrary(m_rayGenLibrary.Get(), {L"RayGen"});
 	pipeline.AddLibrary(m_missLibrary.Get(), {L"Miss"});
-	pipeline.AddLibrary(m_hitLibrary.Get(), {L"ClosestHit"});
+	pipeline.AddLibrary(m_hitLibrary.Get(), {L"ClosestHit", L"PlaneClosestHit"});
 
 	// Create root signatures, to define shader external inputs
 	m_rayGenSignature = CreateGenSignature();
@@ -785,6 +831,7 @@ void DX12HelloTriangle::CreateRaytracingPipeline()
 	// Hit group for the triangles, with a shader simply interpolating vertex
 	// colors
 	pipeline.AddHitGroup(L"HitGroup", L"ClosestHit");
+	pipeline.AddHitGroup(L"PlaneHitGroup", L"PlaneClosestHit");
 
 	// The following section associates the root signature to each shader.
 	// Some shaders share the same root signature (eg. Miss and ShadowMiss).
@@ -793,7 +840,7 @@ void DX12HelloTriangle::CreateRaytracingPipeline()
 	// same root signature.
 	pipeline.AddRootSignatureAssociation(m_rayGenSignature.Get(), {L"RayGen"});
 	pipeline.AddRootSignatureAssociation(m_missSignature.Get(), {L"Miss"});
-	pipeline.AddRootSignatureAssociation(m_hitSignature.Get(), {L"HitGroup"});
+	pipeline.AddRootSignatureAssociation(m_hitSignature.Get(), {L"HitGroup", L"PlaneHitGroup"});
 
 	// The payload size defines the maximum size of the data carried by the rays,
 	// e.g. the data exchanged between the shaders (HitInfo).
@@ -881,10 +928,21 @@ void DX12HelloTriangle::CreateShaderBindingTable()
 	m_sbtHelper.AddRayGenerationProgram(L"RayGen", std::vector<void *>{heapPointer});
 	m_sbtHelper.AddMissProgram(L"Miss", {});
 
-	auto vertexBufferPointer = reinterpret_cast<void *>(m_vertexBuffer->GetGPUVirtualAddress());
-	auto globalConstBufferPointer = reinterpret_cast<void*>(m_globalConstBuffer->GetGPUVirtualAddress());
+	// Example on how to add vertex buffer and global const buffer
+	// auto vertexBufferPointer = reinterpret_cast<void *>(m_vertexBuffer->GetGPUVirtualAddress());
+	// auto globalConstBufferPointer = reinterpret_cast<void*>(m_globalConstBuffer->GetGPUVirtualAddress());
+	// m_sbtHelper.AddHitGroup(L"HitGroup", std::vector<void *>{vertexBufferPointer, globalConstBufferPointer});
 
-	m_sbtHelper.AddHitGroup(L"HitGroup", std::vector<void *>{vertexBufferPointer, globalConstBufferPointer});
+	// Triangle per instance const buffer 
+	for (uint32_t i = 0; i < m_perInstanceConstBuffers.size(); ++i)
+	{
+		auto pointer = reinterpret_cast<void*>(m_perInstanceConstBuffers[i]->GetGPUVirtualAddress());
+		m_sbtHelper.AddHitGroup(L"HitGroup", std::vector<void*>{pointer});
+	}
+
+	// Plane const buffer 
+	auto pointer = reinterpret_cast<void*>(m_perInstanceConstBuffers[0]->GetGPUVirtualAddress());
+	m_sbtHelper.AddHitGroup(L"PlaneHitGroup", std::vector<void*>{pointer});
 
 	uint32_t sbtSize = m_sbtHelper.ComputeSBTSize();
 

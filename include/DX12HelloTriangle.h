@@ -73,6 +73,7 @@ private:
 	ComPtr<ID3D12Resource> m_planeBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_planeBufferView;
 	ComPtr<ID3D12Resource> m_globalConstBuffer;
+	std::vector<ComPtr<ID3D12Resource>> m_perInstanceConstBuffers;
 
 	// Synchronization objects
 	uint32_t m_frameIndex;
@@ -128,6 +129,7 @@ private:
 	void UpdateCameraBuffer();
 	void CreatePlaneBV();
 	void CreateGlobalConstantBuffer();
+	void CreatePerInstanceConstantBuffers();
 	void InitCamera();
 	virtual void OnKeyUp(uint8_t key);
 	virtual void OnKeyDown(uint8_t key);
